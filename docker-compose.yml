@@ -1,0 +1,16 @@
+version: '3'
+
+services:
+  meu_flume:
+    image: bigdata-flume:latest
+    container_name: flume_semana1
+    build: .
+    volumes:
+      - ./:/dados
+    command: flume-ng agent -n a1 -c /opt/flume/conf -f /dados/flume.conf -Dflume.root.logger=INFO,console
+    networks:
+      - bigdata-net
+
+networks:
+  bigdata-net:
+    driver: bridge
