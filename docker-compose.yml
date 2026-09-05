@@ -10,7 +10,58 @@ services:
     command: flume-ng agent -n a1 -c /opt/flume/conf -f /dados/flume.conf -Dflume.root.logger=INFO,console
     networks:
       - bigdata-net
+  flink-jobmanager:
 
+    build:
+      context: ./flink
+    image: meu-flink-python:1.18
+
+    container_name: flink_jobmanager
+
+    ports:
+
+      - "8081:8081"
+
+    command: jobmanager
+    
+    volumes:
+      - ./flink:/opt/flink/job
+
+    environment:
+
+      - JOB_MANAGER_RPC_ADDRESS=flink-jobmanager
+
+    networks:
+
+      - bigdata-net
+
+
+  flink-taskmanager:
+
+    build:
+      context: ./flink
+
+    image: meu-flink-python:1.18
+
+    container_name: flink_taskmanager
+
+    depends_on:
+
+      - flink-jobmanager
+
+    command: taskmanager
+
+    volumes:
+      - ./flink:/opt/flink/job 
+
+    environment:
+
+      - JOB_MANAGER_RPC_ADDRESS=flink-jobmanager
+
+    networks:
+
+      - bigdata-net
+      
 networks:
   bigdata-net:
     driver: bridge
