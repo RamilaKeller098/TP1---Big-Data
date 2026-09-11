@@ -1,0 +1,4 @@
+dados_saida/
+__pycache__/
+*.pyc
+*.log
