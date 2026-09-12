@@ -1,67 +1,122 @@
 version: '3'
 
 services:
+
   meu_flume:
     image: bigdata-flume:latest
-    container_name: flume_semana1
     build: .
+    container_name: flume_semana1
+
     volumes:
-      - ./:/dados
-    command: flume-ng agent -n a1 -c /opt/flume/conf -f /dados/flume.conf -Dflume.root.logger=INFO,console
+      # arquivos de entrada
+      - ./eventos.log:/dados/eventos.log
+      - ./flume.conf:/dados/flume.conf
+
+      # saída do flume
+      - ./dados_saida:/dados_saida
+
+    command: >
+      flume-ng agent
+      -n a1
+      -c /opt/flume/conf
+      -f /dados/flume.conf
+      -Dflume.root.logger=INFO,console
+
     networks:
       - bigdata-net
+
+
+
   flink-jobmanager:
 
     build:
       context: ./flink
+
     image: meu-flink-python:1.18
 
     container_name: flink_jobmanager
 
     ports:
-
       - "8081:8081"
 
     command: jobmanager
-    
+
+
     volumes:
+
+      # código python do flink
       - ./flink:/opt/flink/job
+
+      # acesso aos dados
+      - ./dados_saida:/dados_saida
+
+      # mantém acesso ao log original
+      - ./eventos.log:/dados/eventos.log
+
 
     environment:
 
       - JOB_MANAGER_RPC_ADDRESS=flink-jobmanager
+
 
     networks:
 
       - bigdata-net
 
 
+
+
   flink-taskmanager:
 
+
     build:
+
       context: ./flink
+
 
     image: meu-flink-python:1.18
 
+
     container_name: flink_taskmanager
+
 
     depends_on:
 
       - flink-jobmanager
 
+
     command: taskmanager
 
+
+
     volumes:
-      - ./flink:/opt/flink/job 
+
+      # código python
+      - ./flink:/opt/flink/job
+
+      # dados processados pelo flume
+      - ./dados_saida:/dados_saida
+
+      # log original
+      - ./eventos.log:/dados/eventos.log
+
+
 
     environment:
 
       - JOB_MANAGER_RPC_ADDRESS=flink-jobmanager
 
+
+
     networks:
 
       - bigdata-net
-      
+
+
+
+
 networks:
+
   bigdata-net:
+
     driver: bridge
