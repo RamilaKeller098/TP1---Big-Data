@@ -1,122 +1,96 @@
-version: '3'
 
 services:
+
+  # --- HDFS ---
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: namenode
+    hostname: namenode
+    restart: unless-stopped
+    ports:
+      - "9870:9870"
+      - "9000:9000"
+    environment:
+      - CLUSTER_NAME=bigdata-cluster
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+    volumes:
+      - namenode_data:/hadoop/dfs/name  # <--- Volume persistente
+    networks:
+      - bigdata-net
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: datanode
+    hostname: datanode
+    restart: unless-stopped
+    depends_on:
+      - namenode
+    environment:
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+      - SERVICE_PRECONDITION=namenode:9870
+    volumes:
+      - datanode_data:/hadoop/dfs/data  # <--- Volume persistente
+    networks:
+      - bigdata-net
+  # --- Fim HDFS ---
 
   meu_flume:
     image: bigdata-flume:latest
     build: .
     container_name: flume_semana1
-
+    depends_on:
+      - namenode
     volumes:
-      # arquivos de entrada
       - ./eventos.log:/dados/eventos.log
       - ./flume.conf:/dados/flume.conf
-
-      # saída do flume
       - ./dados_saida:/dados_saida
-
     command: >
       flume-ng agent
       -n a1
       -c /opt/flume/conf
       -f /dados/flume.conf
       -Dflume.root.logger=INFO,console
-
     networks:
       - bigdata-net
-
-
 
   flink-jobmanager:
-
     build:
       context: ./flink
-
     image: meu-flink-python:1.18
-
     container_name: flink_jobmanager
-
     ports:
       - "8081:8081"
-
     command: jobmanager
-
-
     volumes:
-
-      # código python do flink
       - ./flink:/opt/flink/job
-
-      # acesso aos dados
       - ./dados_saida:/dados_saida
-
-      # mantém acesso ao log original
       - ./eventos.log:/dados/eventos.log
-
-
     environment:
-
       - JOB_MANAGER_RPC_ADDRESS=flink-jobmanager
-
-
     networks:
-
       - bigdata-net
-
-
-
 
   flink-taskmanager:
-
-
     build:
-
       context: ./flink
-
-
     image: meu-flink-python:1.18
-
-
     container_name: flink_taskmanager
-
-
     depends_on:
-
       - flink-jobmanager
-
-
     command: taskmanager
-
-
-
     volumes:
-
-      # código python
       - ./flink:/opt/flink/job
-
-      # dados processados pelo flume
       - ./dados_saida:/dados_saida
-
-      # log original
       - ./eventos.log:/dados/eventos.log
-
-
-
     environment:
-
       - JOB_MANAGER_RPC_ADDRESS=flink-jobmanager
-
-
-
     networks:
-
       - bigdata-net
 
-
-
-
 networks:
-
   bigdata-net:
-
     driver: bridge
+
+volumes:
+  namenode_data:
+  datanode_data:
