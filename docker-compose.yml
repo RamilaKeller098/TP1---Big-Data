@@ -87,6 +87,21 @@ services:
     networks:
       - bigdata-net
 
+  spark:
+    image: apache/spark:3.5.1-python3
+    container_name: spark
+    hostname: spark
+    depends_on:
+      - namenode
+      - datanode
+    volumes:
+      - ./spark/jobs:/opt/spark/jobs
+      - ./dados_saida:/dados_saida
+    command: >
+      /bin/bash -c "sleep infinity"
+    networks:
+      - bigdata-net
+
 networks:
   bigdata-net:
     driver: bridge
