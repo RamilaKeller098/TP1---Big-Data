@@ -1,5 +1,5 @@
 import json
-
+import happybase
 from datetime import datetime
 
 from pyflink.datastream import StreamExecutionEnvironment
@@ -8,6 +8,27 @@ from pyflink.common.watermark_strategy import TimestampAssigner
 from pyflink.common.time import Time
 from pyflink.datastream.window import SlidingEventTimeWindows
 
+
+def gravar_hbase(registro):
+    """
+    registro = (id_usuario, evento, produto, timestamp, contagem)
+    Grava um alerta na tabela 'alertas' do HBase.
+    """
+    try:
+        conn = happybase.Connection("hbase", port=9090, timeout=5000)
+        conn.open()
+        tabela = conn.table("alertas")
+        row_key = f"{registro[0]}_{registro[3]}".encode()
+        tabela.put(row_key, {
+            b"info:id_usuario":  str(registro[0]).encode(),
+            b"info:evento":      str(registro[1]).encode(),
+            b"info:produto":     str(registro[2]).encode(),
+            b"info:timestamp":   str(registro[3]).encode(),
+            b"info:contagem":    str(registro[4]).encode(),
+        })
+        conn.close()
+    except Exception as e:
+        print(f"[HBase] Erro ao gravar: {e}")
 
 class MeuTimestampAssigner(TimestampAssigner):
 
@@ -96,7 +117,9 @@ def main():
     )
 
 
-    resultado.print()
+    # resultado.print()
+    resultado.map(lambda x: (gravar_hbase(x), x)[1]).print()
+
 
 
     env.execute(

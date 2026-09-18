@@ -8,8 +8,8 @@ services:
     hostname: namenode
     restart: unless-stopped
     ports:
-      - "9870:9870"
-      - "9000:9000"
+      - "9871:9870"
+      - "9001:9000"
     environment:
       - CLUSTER_NAME=bigdata-cluster
       - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
@@ -59,7 +59,7 @@ services:
     image: meu-flink-python:1.18
     container_name: flink_jobmanager
     ports:
-      - "8081:8081"
+      - "8082:8081"
     command: jobmanager
     volumes:
       - ./flink:/opt/flink/job
@@ -94,11 +94,51 @@ services:
     depends_on:
       - namenode
       - datanode
+    environment:
+      - PATH=/opt/spark/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      - SPARK_HOME=/opt/spark
     volumes:
       - ./spark/jobs:/opt/spark/jobs
       - ./dados_saida:/dados_saida
     command: >
       /bin/bash -c "sleep infinity"
+    networks:
+      - bigdata-net
+  
+  # --- HBase ---
+  hbase:
+    image: dajobe/hbase
+    container_name: hbase
+    hostname: hbase-docker
+    extra_hosts:
+      - "hbase-docker:127.0.0.1"
+      - "hbase:127.0.0.1"
+    command: >
+      /bin/bash -c "start-hbase.sh && hbase thrift start"
+    ports:
+      - "16011:16010"
+      - "2182:2181"
+      - "9091:9090"
+    networks:
+      bigdata-net:
+        aliases:
+          - hbase
+          - hbase-docker
+  
+  # --- Hive ---
+  hive:
+    image: apache/hive:4.0.0
+    container_name: hive
+    hostname: hive
+    depends_on:
+      - namenode
+      - datanode
+    ports:
+      - "10000:10000"
+      - "10002:10002"
+    environment:
+      - SERVICE_NAME=hiveserver2
+      - FS_DEFAULT_NAME=hdfs://namenode:9000
     networks:
       - bigdata-net
 

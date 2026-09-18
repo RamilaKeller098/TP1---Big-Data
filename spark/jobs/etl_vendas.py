@@ -1,32 +1,45 @@
-from pyspark.sql.functions import to_timestamp, count
+from pyspark.sql.functions import to_timestamp, count, current_date
 from pyspark.sql import SparkSession
 
 spark = (
     SparkSession.builder
     .appName("ETL Vendas E-commerce")
+    .config("spark.sql.warehouse.dir", "hdfs://namenode:9000/user/hive/warehouse")
+    .enableHiveSupport()   
     .getOrCreate()
 )
 
 print("SparkSession criada com sucesso!")
 
-caminho_hdfs = "hdfs://namenode:9000/flume/eventos/20260913"
+# --- Leitura do HDFS ---
+from datetime import date, timedelta
+hoje = date.today().strftime("%Y%m%d")
+caminho_hdfs = f"hdfs://namenode:9000/flume/eventos/{hoje}"
 
 df = spark.read.json(caminho_hdfs)
-
 print("Dados lidos do HDFS com sucesso!")
-
 df.printSchema()
 
-df.show(truncate=False)
-
+# --- Limpeza ---
 df_limpo = df.dropna()
+print(f"Registros antes/depois da limpeza: {df.count()} / {df_limpo.count()}")
 
-print("Quantidade antes da limpeza:", df.count())
-print("Quantidade depois da limpeza:", df_limpo.count())
+# --- Transformação ---
+df_transformado = df_limpo.withColumn("timestamp", to_timestamp("timestamp"))
 
-df_transformado = df_limpo.withColumn(
-    "timestamp",
-    to_timestamp("timestamp")
+# --- Aggregations (wide dependencies) ---
+resumo_produto_evento = (
+    df_transformado
+    .groupBy("produto", "evento")
+    .agg(count("*").alias("total"))
+    .orderBy("produto", "total", ascending=[True, False])
+)
+
+resumo_eventos = (
+    df_transformado
+    .groupBy("evento")
+    .agg(count("*").alias("total"))
+    .orderBy("total", ascending=False)
 )
 
 resumo_produtos = (
@@ -36,35 +49,33 @@ resumo_produtos = (
     .orderBy("total_eventos", ascending=False)
 )
 
-print("Resumo de eventos por produto:")
+resumo_produto_evento.show()
+resumo_eventos.show()
 resumo_produtos.show()
 
-resumo_eventos = (
-    df_transformado
-    .groupBy("evento")
-    .agg(count("*").alias("total"))
-    .orderBy("total", ascending=False)
-)
+# --- Gravar no Hive (Data Warehouse) ---
+spark.sql("CREATE DATABASE IF NOT EXISTS ecommerce")
 
-print("Resumo por tipo de evento:")
-resumo_eventos.show()
-
-resumo_produto_evento = (
-    df_transformado
-    .groupBy("produto", "evento")
-    .agg(count("*").alias("total"))
-    .orderBy("produto", "total", ascending=[True, False])
-)
-
-print("Resumo por produto e evento:")
-resumo_produto_evento.show()
-
-
-caminho_saida = "hdfs://namenode:9000/resultados/resumo_produto_evento"
-
+# Tabela principal de resumo
 resumo_produto_evento.write \
     .mode("overwrite") \
-    .parquet(caminho_saida)
+    .saveAsTable("ecommerce.resumo_produto_evento")
 
-print("Resultado salvo no HDFS com sucesso!")
+# Tabela de eventos por tipo
+resumo_eventos.write \
+    .mode("overwrite") \
+    .saveAsTable("ecommerce.resumo_eventos")
 
+# Tabela de ranking de produtos
+resumo_produtos.write \
+    .mode("overwrite") \
+    .saveAsTable("ecommerce.ranking_produtos")
+
+print("Dados gravados no Hive com sucesso!")
+
+# --- Backup em Parquet no HDFS (mantém compatibilidade) ---
+resumo_produto_evento.write \
+    .mode("overwrite") \
+    .parquet("hdfs://namenode:9000/resultados/resumo_produto_evento")
+
+print("Backup Parquet salvo no HDFS!")
